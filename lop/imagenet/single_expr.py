@@ -1,3 +1,5 @@
+import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 import sys
 import json
 import torch
@@ -9,6 +11,7 @@ from lop.algos.bp import Backprop
 from lop.nets.conv_net import ConvNet
 from lop.nets.conv_net2 import ConvNet2
 from lop.algos.convCBP import ConvCBP
+from lop.algos.ent_convCBP import EntConvCBP
 from torch.nn.functional import softmax
 from lop.nets.linear import MyLinear
 from lop.utils.miscellaneous import nll_accuracy as accuracy
@@ -86,6 +89,7 @@ def repeat_expr(params: {}):
         net = MyLinear( 
             input_size=3072, num_outputs=classes_per_task
         )
+    net.to(dev)
 
     if agent_type in ['bp', 'linear']:
         learner = Backprop(
@@ -101,6 +105,22 @@ def repeat_expr(params: {}):
         )
     elif agent_type == 'cbp':
         learner = ConvCBP(
+            net=net,
+            step_size=step_size,
+            momentum=momentum,
+            loss='nll',
+            weight_decay=weight_decay,
+            opt=opt,
+            init='default',
+            replacement_rate=replacement_rate,
+            decay_rate=decay_rate,
+            util_type=util_type,
+            device=dev,
+            maturity_threshold=maturity_threshold,
+        )
+    elif agent_type == 'ent_cbp':
+        learner = EntConvCBP(
+            lambda_ent=params['lambda_ent'],
             net=net,
             step_size=step_size,
             momentum=momentum,
@@ -136,7 +156,7 @@ def repeat_expr(params: {}):
         x_train, x_test = x_train.type(torch.FloatTensor), x_test.type(torch.FloatTensor)
         if agent_type == 'linear':
             x_train, x_test = x_train.flatten(1), x_test.flatten(1)
-        if use_gpu == 1:
+        if 'cuda' in str(dev):
             x_train, x_test, y_train, y_test = x_train.to(dev), x_test.to(dev), y_train.to(dev), y_test.to(dev)
         if new_heads:
             net.layers[-1].weight.data *= 0
